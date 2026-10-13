@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType } = require('@discordjs/voice');
-const play = require('play-dl');
+const { DisTube } = require('distube');
+const { YtDlpPlugin } = require('@distube/yt-dlp');
 const http = require('http');
 
 // Render Web Service kapanmasın diye mini web sunucusu
@@ -23,7 +23,12 @@ const client = new Client({
     ]
 });
 
-const player = createAudioPlayer();
+// DisTube müzik yöneticisini başlatıyoruz
+const distube = new DisTube(client, {
+    emitNewSongOnly: true,
+    leaveOnFinish: false,
+    plugins: [new YtDlpPlugin()]
+});
 
 client.once('ready', () => {
     console.log(`🤖 Bot başarıyla giriş yaptı: ${client.user.tag}`);
@@ -45,44 +50,27 @@ client.on('messageCreate', async message => {
         }
 
         try {
-            message.reply(`🔍 **${query}** aranıyor...`);
-
-            // play-dl ile YouTube'da arama yapıyoruz
-            let searchResults = await play.search(query, { limit: 1 });
-
-            if (!searchResults || searchResults.length === 0) {
-                return message.reply('Aradığın şarkı bulunamadı!');
-            }
-
-            const song = searchResults[0];
-
-            // Ses akışını doğrudan çekiyoruz
-            let streamData = await play.stream(song.url);
-
-            const connection = joinVoiceChannel({
-                channelId: voiceChannel.id,
-                guildId: voiceChannel.guild.id,
-                adapterCreator: voiceChannel.guild.voiceAdapterCreator,
-                selfDeaf: true
+            message.reply(`🔍 **${query}** aranıyor ve çalınıyor...`);
+            
+            // DisTube doğrudan ses kanalına bağlanıp şarkıyı oynatır
+            await distube.play(voiceChannel, query, {
+                textChannel: message.channel,
+                member: message.member
             });
-
-            const resource = createAudioResource(streamData.stream, {
-                inputType: streamData.type
-            });
-
-            player.play(resource);
-            connection.subscribe(player);
-
-            message.channel.send(`🎶 Şu an çalıyor: **${song.title}**`);
         } catch (error) {
-            console.error('SES AKIŞ HATASI:', error);
+            console.error('MÜZİK HATASI:', error);
             message.reply(`Müzik çalınırken bir hata oluştu: ${error.message}`);
         }
     }
 
     if (message.content === '!stop') {
-        player.stop();
-        message.reply('⏹️ Müzik durduruldu.');
+        const queue = distube.getQueue(message.guild.id);
+        if (queue) {
+            distube.stop(message.guild.id);
+            message.reply('⏹️ Müzik durduruldu ve kuyruk temizlendi.');
+        } else {
+            message.reply('Şu an çalan bir müzik yok.');
+        }
     }
 });
 
