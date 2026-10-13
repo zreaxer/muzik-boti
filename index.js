@@ -1,7 +1,8 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType } = require('@discordjs/voice');
-const play = require('play-dl');
+const ytdl = require('@distube/ytdl-core');
+const ytSearch = require('yt-search');
 const http = require('http');
 
 // Render Web Service kapanmasın diye mini web sunucusu
@@ -47,14 +48,15 @@ client.on('messageCreate', async message => {
         try {
             message.reply(`🔍 **${query}** aranıyor...`);
 
-            let yt_info = await play.search(query, { limit: 1 });
+            // yt-search ile şarkıyı güvenli bir şekilde arıyoruz
+            const searchResult = await ytSearch(query);
+            const videos = searchResult.videos;
 
-            if (!yt_info || yt_info.length === 0) {
+            if (!videos || videos.length === 0) {
                 return message.reply('Aradığın şarkı bulunamadı!');
             }
 
-            // Alternatif güvenli akış çekme yöntemi
-            let streamData = await play.stream(yt_info[0].url);
+            const song = videos[0];
 
             const connection = joinVoiceChannel({
                 channelId: voiceChannel.id,
@@ -63,16 +65,21 @@ client.on('messageCreate', async message => {
                 selfDeaf: true
             });
 
-            const resource = createAudioResource(streamData.stream, {
-                inputType: streamData.type
+            // Bulunan video linkini ytdl ile akışa çeviriyoruz
+            const stream = ytdl(song.url, {
+                filter: 'audioonly',
+                quality: 'highestaudio',
+                highWaterMark: 1 << 25
             });
+
+            const resource = createAudioResource(stream, { inputType: StreamType.Arbitrary });
 
             player.play(resource);
             connection.subscribe(player);
 
-            message.channel.send(`🎶 Şu an çalıyor: **${yt_info[0].title}**`);
+            message.channel.send(`🎶 Şu an çalıyor: **${song.title}**`);
         } catch (error) {
-            console.error('MÜZİK ÇALMA HATASI DETAYI:', error);
+            console.error('MÜZİK ÇALMA HATASI:', error);
             message.reply(`Müzik çalınırken bir hata oluştu. Hata: ${error.message}`);
         }
     }
