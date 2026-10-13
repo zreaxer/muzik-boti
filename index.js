@@ -1,7 +1,22 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource } = require('@discordjs/voice');
 const ytdl = require('@distube/ytdl-core');
+const http = require('http');
+
+// Render'ın Web Service olarak hata vermemesi için mini bir HTTP sunucusu
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot aktif ve calisiyor!\n');
+});
+
+server.listen(process.env.PORT || 3000, () => {
+    printLog('Web sunucusu hazir.');
+});
+
+function printLog(msg) {
+    console.log(`[LOG] ${msg}`);
+}
 
 const client = new Client({
     intents: [
