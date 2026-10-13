@@ -1,17 +1,16 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType } = require('@discordjs/voice');
-const ytdl = require('@distube/ytdl-core');
+const play = require('play-dl');
 const ytSearch = require('yt-search');
 const http = require('http');
 
-// Render Web Service kapanmasın diye
-const httpHandler = http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot aktif ve calisiyor!\n');
 });
 
-httpHandler.listen(process.env.PORT || 3000, () => {
+server.listen(process.env.PORT || 3000, () => {
     console.log('[LOG] Web sunucusu hazir.');
 });
 
@@ -46,9 +45,8 @@ client.on('messageCreate', async message => {
         }
 
         try {
-            message.reply(`🔍 **${query}** aranıyor...`);
+            message.reply(`🔍 **${query}** aranıyor ve ses akışı hazırlanıyor...`);
 
-            // Güvenli arama
             const searchResult = await ytSearch(query);
             const videos = searchResult.videos;
 
@@ -65,21 +63,12 @@ client.on('messageCreate', async message => {
                 selfDeaf: true
             });
 
-            // Akış hatası vermeyen optimize ytdl ayarları
-            const stream = ytdl(song.url, {
-                filter: 'audioonly',
-                quality: 'highestaudio',
-                highWaterMark: 1 << 25,
-                dlChunkSize: 0,
-                requestOptions: {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                    }
-                }
-            });
+            // Doğrudan play-dl stream fonksiyonu ile ham ses verisini çekiyoruz
+            let streamData = await play.stream(song.url, { quality: 2 });
 
-            const resource = createAudioResource(stream, { 
-                inputType: StreamType.Arbitrary 
+            const resource = createAudioResource(streamData.stream, {
+                inputType: streamData.type,
+                inlineVolume: true
             });
 
             player.play(resource);
@@ -87,7 +76,7 @@ client.on('messageCreate', async message => {
 
             message.channel.send(`🎶 Şu an çalıyor: **${song.title}**`);
         } catch (error) {
-            console.error('HATA:', error);
+            console.error('SES AKIŞ HATASI:', error);
             message.reply(`Müzik çalınırken bir hata oluştu: ${error.message}`);
         }
     }
