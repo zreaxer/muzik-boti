@@ -47,15 +47,14 @@ client.on('messageCreate', async message => {
         try {
             message.reply(`🔍 **${query}** aranıyor...`);
 
-            // İster link ister arama terimi olsun YouTube'da bulur
             let yt_info = await play.search(query, { limit: 1 });
 
             if (!yt_info || yt_info.length === 0) {
                 return message.reply('Aradığın şarkı bulunamadı!');
             }
 
-            // Ses akışını al
-            let stream = await play.stream(yt_info[0].url);
+            // Alternatif güvenli akış çekme yöntemi
+            let streamData = await play.stream(yt_info[0].url);
 
             const connection = joinVoiceChannel({
                 channelId: voiceChannel.id,
@@ -64,8 +63,8 @@ client.on('messageCreate', async message => {
                 selfDeaf: true
             });
 
-            const resource = createAudioResource(stream.stream, {
-                inputType: stream.type
+            const resource = createAudioResource(streamData.stream, {
+                inputType: streamData.type
             });
 
             player.play(resource);
@@ -73,8 +72,8 @@ client.on('messageCreate', async message => {
 
             message.channel.send(`🎶 Şu an çalıyor: **${yt_info[0].title}**`);
         } catch (error) {
-            console.error('Hata oluştu:', error);
-            message.reply('Müzik çalınırken bir hata oluştu.');
+            console.error('MÜZİK ÇALMA HATASI DETAYI:', error);
+            message.reply(`Müzik çalınırken bir hata oluştu. Hata: ${error.message}`);
         }
     }
 
