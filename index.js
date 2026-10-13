@@ -1,7 +1,8 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const { DisTube } = require('distube');
-const { YtDlpPlugin } = require('@distube/yt-dlp');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType } = require('@discordjs/voice');
+const ytdl = require('@distube/ytdl-core');
+const ytSearch = require('yt-search');
 const http = require('http');
 
 // Render Web Service kapanmasın diye mini web sunucusu
@@ -23,12 +24,7 @@ const client = new Client({
     ]
 });
 
-// DisTube müzik yöneticisini başlatıyoruz
-const distube = new DisTube(client, {
-    emitNewSongOnly: true,
-    leaveOnFinish: false,
-    plugins: [new YtDlpPlugin()]
-});
+const player = createAudioPlayer();
 
 client.once('ready', () => {
     console.log(`🤖 Bot başarıyla giriş yaptı: ${client.user.tag}`);
@@ -50,27 +46,49 @@ client.on('messageCreate', async message => {
         }
 
         try {
-            message.reply(`🔍 **${query}** aranıyor ve çalınıyor...`);
-            
-            // DisTube doğrudan ses kanalına bağlanıp şarkıyı oynatır
-            await distube.play(voiceChannel, query, {
-                textChannel: message.channel,
-                member: message.member
+            message.reply(`🔍 **${query}** aranıyor...`);
+
+            const searchResult = await ytSearch(query);
+            const videos = searchResult.videos;
+
+            if (!videos || videos.length === 0) {
+                return message.reply('Aradığın şarkı bulunamadı!');
+            }
+
+            const song = videos[0];
+
+            const connection = joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId: voiceChannel.guild.id,
+                adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+                selfDeaf: true
             });
+
+            // Akış kalitesini optimize eden ayarlar
+            const stream = ytdl(song.url, {
+                filter: 'audioonly',
+                quality: 'highestaudio',
+                highWaterMark: 1 << 25,
+                dlChunkSize: 0
+            });
+
+            const resource = createAudioResource(stream, { 
+                inputType: StreamType.Arbitrary 
+            });
+
+            player.play(resource);
+            connection.subscribe(player);
+
+            message.channel.send(`🎶 Şu an çalıyor: **${song.title}**`);
         } catch (error) {
-            console.error('MÜZİK HATASI:', error);
-            message.reply(`Müzik çalınırken bir hata oluştu: ${error.message}`);
+            console.error('MÜZİK ÇALMA HATASI:', error);
+            message.reply(`Müzik çalınırken bir hata oluştu. Hata: ${error.message}`);
         }
     }
 
     if (message.content === '!stop') {
-        const queue = distube.getQueue(message.guild.id);
-        if (queue) {
-            distube.stop(message.guild.id);
-            message.reply('⏹️ Müzik durduruldu ve kuyruk temizlendi.');
-        } else {
-            message.reply('Şu an çalan bir müzik yok.');
-        }
+        player.stop();
+        message.reply('⏹️ Müzik durduruldu.');
     }
 });
 
