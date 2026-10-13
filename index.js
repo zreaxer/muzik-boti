@@ -1,16 +1,17 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType } = require('@discordjs/voice');
-const play = require('play-dl');
+const ytdl = require('@distube/ytdl-core');
+const ytSearch = require('yt-search');
 const http = require('http');
 
 // Render Web Service kapanmasın diye
-const server = http.createServer((req, res) => {
+const httpHandler = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot aktif ve calisiyor!\n');
 });
 
-server.listen(process.env.PORT || 3000, () => {
+httpHandler.listen(process.env.PORT || 3000, () => {
     console.log('[LOG] Web sunucusu hazir.');
 });
 
@@ -45,21 +46,17 @@ client.on('messageCreate', async message => {
         }
 
         try {
-            message.reply(`🔍 SoundCloud üzerinde **${query}** aranıyor...`);
+            message.reply(`🔍 **${query}** aranıyor...`);
 
-            // YouTube engeline takılmamak için doğrudan SoundCloud'da arama yapıyoruz
-            let searchResults = await play.search(query, {
-                source: { soundcloud: 'tracks' },
-                limit: 1
-            });
+            // Güvenli arama
+            const searchResult = await ytSearch(query);
+            const videos = searchResult.videos;
 
-            if (!searchResults || searchResults.length === 0) {
-                return message.reply('Aradığın şarkı SoundCloud üzerinde bulunamadı!');
+            if (!videos || videos.length === 0) {
+                return message.reply('Aradığın şarkı bulunamadı!');
             }
 
-            const song = searchResults[0];
-
-            let streamData = await play.stream(song.url);
+            const song = videos[0];
 
             const connection = joinVoiceChannel({
                 channelId: voiceChannel.id,
@@ -68,14 +65,27 @@ client.on('messageCreate', async message => {
                 selfDeaf: true
             });
 
-            const resource = createAudioResource(streamData.stream, {
-                inputType: streamData.type
+            // Akış hatası vermeyen optimize ytdl ayarları
+            const stream = ytdl(song.url, {
+                filter: 'audioonly',
+                quality: 'highestaudio',
+                highWaterMark: 1 << 25,
+                dlChunkSize: 0,
+                requestOptions: {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    }
+                }
+            });
+
+            const resource = createAudioResource(stream, { 
+                inputType: StreamType.Arbitrary 
             });
 
             player.play(resource);
             connection.subscribe(player);
 
-            message.channel.send(`🎶 Şu an çalıyor (SoundCloud): **${song.title}**`);
+            message.channel.send(`🎶 Şu an çalıyor: **${song.title}**`);
         } catch (error) {
             console.error('HATA:', error);
             message.reply(`Müzik çalınırken bir hata oluştu: ${error.message}`);
