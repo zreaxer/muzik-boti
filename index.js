@@ -1,10 +1,8 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType } = require('@discordjs/voice');
-const ytdl = require('@distube/ytdl-core');
-const ytSearch = require('yt-search');
+const play = require('play-dl');
 const http = require('http');
-const ffmpegPath = require('ffmpeg-static');
 
 // Render Web Service kapanmasın diye mini web sunucusu
 const server = http.createServer((req, res) => {
@@ -25,8 +23,7 @@ const client = new Client({
     ]
 });
 
-// Her sunucu için ayrı bir ses oynatıcı oluşturan yapı
-const players = new Map();
+const player = createAudioPlayer();
 
 client.once('ready', () => {
     console.log(`🤖 Bot başarıyla giriş yaptı: ${client.user.tag}`);
@@ -50,14 +47,17 @@ client.on('messageCreate', async message => {
         try {
             message.reply(`🔍 **${query}** aranıyor...`);
 
-            const searchResult = await ytSearch(query);
-            const videos = searchResult.videos;
+            // play-dl ile YouTube'da arama yapıyoruz
+            let searchResults = await play.search(query, { limit: 1 });
 
-            if (!videos || videos.length === 0) {
+            if (!searchResults || searchResults.length === 0) {
                 return message.reply('Aradığın şarkı bulunamadı!');
             }
 
-            const song = videos[0];
+            const song = searchResults[0];
+
+            // Ses akışını doğrudan çekiyoruz
+            let streamData = await play.stream(song.url);
 
             const connection = joinVoiceChannel({
                 channelId: voiceChannel.id,
@@ -66,41 +66,23 @@ client.on('messageCreate', async message => {
                 selfDeaf: true
             });
 
-            // Ses akışını güvenli şekilde alıyoruz
-            const stream = ytdl(song.url, {
-                filter: 'audioonly',
-                quality: 'highestaudio',
-                highWaterMark: 1 << 25
+            const resource = createAudioResource(streamData.stream, {
+                inputType: streamData.type
             });
-
-            const resource = createAudioResource(stream, { 
-                inputType: StreamType.Arbitrary 
-            });
-
-            let player = players.get(message.guild.id);
-            if (!player) {
-                player = createAudioPlayer();
-                players.set(message.guild.id, player);
-            }
 
             player.play(resource);
             connection.subscribe(player);
 
             message.channel.send(`🎶 Şu an çalıyor: **${song.title}**`);
         } catch (error) {
-            console.error('MÜZİK ÇALMA HATASI:', error);
-            message.reply(`Müzik çalınırken bir hata oluştu. Hata: ${error.message}`);
+            console.error('SES AKIŞ HATASI:', error);
+            message.reply(`Müzik çalınırken bir hata oluştu: ${error.message}`);
         }
     }
 
     if (message.content === '!stop') {
-        const player = players.get(message.guild.id);
-        if (player) {
-            player.stop();
-            message.reply('⏹️ Müzik durduruldu.');
-        } else {
-            message.reply('Şu an çalan bir müzik yok.');
-        }
+        player.stop();
+        message.reply('⏹️ Müzik durduruldu.');
     }
 });
 
