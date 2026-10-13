@@ -1,21 +1,18 @@
 {
-  "name": "muzikboti",
+  "name": "muzik-boti",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "@discordjs/voice": "^0.19.2",
-    "@distube/ytdl-core": "^4.16.12",
-    "discord.js": "^14.27.0",
-    "dotenv": "^18.0.7",
-    "opusscript": "^0.0.8",
-    "ytdl-core": "^4.11.5"
+    "@discordjs/voice": "^0.16.1",
+    "@distube/ytdl-core": "^4.15.8",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5",
+    "ffmpeg-static": "^5.2.0",
+    "opusscript": "^0.0.8"
   }
 }

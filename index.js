@@ -1,22 +1,18 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource } = require('@discordjs/voice');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType } = require('@discordjs/voice');
 const ytdl = require('@distube/ytdl-core');
 const http = require('http');
 
-// Render'ın Web Service olarak hata vermemesi için mini bir HTTP sunucusu
+// Render Web Service için mini web sunucusu
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot aktif ve calisiyor!\n');
 });
 
 server.listen(process.env.PORT || 3000, () => {
-    printLog('Web sunucusu hazir.');
+    console.log('[LOG] Web sunucusu hazir.');
 });
-
-function printLog(msg) {
-    console.log(`[LOG] ${msg}`);
-}
 
 const client = new Client({
     intents: [
@@ -49,10 +45,16 @@ client.on('messageCreate', async message => {
                 channelId: voiceChannel.id,
                 guildId: voiceChannel.guild.id,
                 adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+                selfDeaf: true
             });
 
-            const stream = ytdl(url, { filter: 'audioonly', highWaterMark: 1 << 25 });
-            const resource = createAudioResource(stream);
+            const stream = ytdl(url, {
+                filter: 'audioonly',
+                quality: 'highestaudio',
+                highWaterMark: 1 << 25
+            });
+
+            const resource = createAudioResource(stream, { inputType: StreamType.Arbitrary });
 
             player.play(resource);
             connection.subscribe(player);
