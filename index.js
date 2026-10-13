@@ -1,10 +1,10 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType } = require('@discordjs/voice');
-const play = require('play-dl');
-const ytSearch = require('yt-search');
+const { DisTube } = require('distube');
+const { SpotifyPlugin } = require('@distube/spotify');
 const http = require('http');
 
+// Render Web Service kapanmasın diye mini sunucu
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot aktif ve calisiyor!\n');
@@ -23,7 +23,14 @@ const client = new Client({
     ]
 });
 
-const player = createAudioPlayer();
+// DisTube ile gelişmiş müzik yönetimi
+const distube = new DisTube(client, {
+    emitNewSongOnly: true,
+    leaveOnEmpty: true,
+    leaveOnFinish: false,
+    savePreviousSongs: true,
+    nsfw: false
+});
 
 client.once('ready', () => {
     console.log(`🤖 Bot başarıyla giriş yaptı: ${client.user.tag}`);
@@ -37,7 +44,7 @@ client.on('messageCreate', async message => {
         const voiceChannel = message.member.voice.channel;
 
         if (!query) {
-            return message.reply('Lütfen bir şarkı ismi yaz!');
+            return message.reply('Lütfen bir şarkı ismi veya link yaz!');
         }
 
         if (!voiceChannel) {
@@ -45,46 +52,41 @@ client.on('messageCreate', async message => {
         }
 
         try {
-            message.reply(`🔍 **${query}** aranıyor ve ses akışı hazırlanıyor...`);
-
-            const searchResult = await ytSearch(query);
-            const videos = searchResult.videos;
-
-            if (!videos || videos.length === 0) {
-                return message.reply('Aradığın şarkı bulunamadı!');
-            }
-
-            const song = videos[0];
-
-            const connection = joinVoiceChannel({
-                channelId: voiceChannel.id,
-                guildId: voiceChannel.guild.id,
-                adapterCreator: voiceChannel.guild.voiceAdapterCreator,
-                selfDeaf: true
+            message.reply(`🔍 **${query}** sıraya ekleniyor...`);
+            
+            // DisTube doğrudan oynatma motorunu tetikler
+            await distube.play(voiceChannel, query, {
+                textChannel: message.channel,
+                member: message.member
             });
-
-            // Doğrudan play-dl stream fonksiyonu ile ham ses verisini çekiyoruz
-            let streamData = await play.stream(song.url, { quality: 2 });
-
-            const resource = createAudioResource(streamData.stream, {
-                inputType: streamData.type,
-                inlineVolume: true
-            });
-
-            player.play(resource);
-            connection.subscribe(player);
-
-            message.channel.send(`🎶 Şu an çalıyor: **${song.title}**`);
         } catch (error) {
-            console.error('SES AKIŞ HATASI:', error);
-            message.reply(`Müzik çalınırken bir hata oluştu: ${error.message}`);
+            console.error('DISTUBE OYNATMA HATASI:', error);
+            message.reply(`Şarkı oynatılırken bir hata oluştu: ${error.message}`);
         }
     }
 
     if (message.content === '!stop') {
-        player.stop();
-        message.reply('⏹️ Müzik durduruldu.');
+        const queue = distube.getQueue(message.guild.id);
+        if (queue) {
+            distube.stop(message.guild.id);
+            message.reply('⏹️ Müzik durduruldu ve kuyruk temizlendi.');
+        } else {
+            message.reply('Şu an çalan bir müzik yok.');
+        }
     }
 });
+
+// DisTube etkinlik mesajları
+distube
+    .on('playSong', (queue, song) => {
+        queue.textChannel.send(`🎶 Şu an çalıyor: **${song.name}** - \`${song.formattedDuration}\``);
+    })
+    .on('addSong', (queue, song) => {
+        queue.textChannel.send(`✅ Kuyruğa eklendi: **${song.name}** - \`${song.formattedDuration}\``);
+    })
+    .on('error', (channel, error) => {
+        console.error('DISUBE GENEL HATA:', error);
+        if (channel) channel.send(`Bir hata oluştu: \`${error.slice(0, 1970)}\``);
+    });
 
 client.login(process.env.TOKEN);
