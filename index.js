@@ -1,11 +1,11 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType } = require('@discordjs/voice');
-const ytdl = require('@distube/ytdl-core');
+const play = require('play-dl');
 const ytSearch = require('yt-search');
 const http = require('http');
 
-// Render Web Service kapanmasın diye mini web sunucusu
+// Render Web Service ayakta kalsın diye
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot aktif ve calisiyor!\n');
@@ -48,6 +48,7 @@ client.on('messageCreate', async message => {
         try {
             message.reply(`🔍 **${query}** aranıyor...`);
 
+            // 1. Adım: yt-search ile videoyu buluyoruz (Engelsiz arama)
             const searchResult = await ytSearch(query);
             const videos = searchResult.videos;
 
@@ -57,6 +58,7 @@ client.on('messageCreate', async message => {
 
             const song = videos[0];
 
+            // 2. Adım: Ses kanalına bağlanıyoruz
             const connection = joinVoiceChannel({
                 channelId: voiceChannel.id,
                 guildId: voiceChannel.guild.id,
@@ -64,16 +66,21 @@ client.on('messageCreate', async message => {
                 selfDeaf: true
             });
 
-            // Akış kalitesini optimize eden ayarlar
-            const stream = ytdl(song.url, {
-                filter: 'audioonly',
-                quality: 'highestaudio',
-                highWaterMark: 1 << 25,
-                dlChunkSize: 0
-            });
+            // 3. Adım: play-dl ile akışı güvenli çekme denemesi
+            let stream;
+            try {
+                let sourceData = await play.stream(song.url);
+                stream = sourceData.stream;
+            } catch (err) {
+                console.log('Birinci akış yöntemi takıldı, alternatif deneniyor...');
+                // Alternatif stream
+                let altData = await play.stream(song.url, { discordPlayerCompatibility: true });
+                stream = altData.stream;
+            }
 
             const resource = createAudioResource(stream, { 
-                inputType: StreamType.Arbitrary 
+                inputType: StreamType.Arbitrary,
+                inlineVolume: true 
             });
 
             player.play(resource);
@@ -81,8 +88,8 @@ client.on('messageCreate', async message => {
 
             message.channel.send(`🎶 Şu an çalıyor: **${song.title}**`);
         } catch (error) {
-            console.error('MÜZİK ÇALMA HATASI:', error);
-            message.reply(`Müzik çalınırken bir hata oluştu. Hata: ${error.message}`);
+            console.error('KRİTİK HATA:', error);
+            message.reply(`Müzik çalınırken hata oluştu: ${error.message}`);
         }
     }
 
