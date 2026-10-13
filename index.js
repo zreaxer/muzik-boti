@@ -4,6 +4,7 @@ const { joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType } =
 const ytdl = require('@distube/ytdl-core');
 const ytSearch = require('yt-search');
 const http = require('http');
+const ffmpegPath = require('ffmpeg-static');
 
 // Render Web Service kapanmasın diye mini web sunucusu
 const server = http.createServer((req, res) => {
@@ -24,7 +25,8 @@ const client = new Client({
     ]
 });
 
-const player = createAudioPlayer();
+// Her sunucu için ayrı bir ses oynatıcı oluşturan yapı
+const players = new Map();
 
 client.once('ready', () => {
     console.log(`🤖 Bot başarıyla giriş yaptı: ${client.user.tag}`);
@@ -48,7 +50,6 @@ client.on('messageCreate', async message => {
         try {
             message.reply(`🔍 **${query}** aranıyor...`);
 
-            // yt-search ile şarkıyı güvenli bir şekilde arıyoruz
             const searchResult = await ytSearch(query);
             const videos = searchResult.videos;
 
@@ -65,14 +66,22 @@ client.on('messageCreate', async message => {
                 selfDeaf: true
             });
 
-            // Bulunan video linkini ytdl ile akışa çeviriyoruz
+            // Ses akışını güvenli şekilde alıyoruz
             const stream = ytdl(song.url, {
                 filter: 'audioonly',
                 quality: 'highestaudio',
                 highWaterMark: 1 << 25
             });
 
-            const resource = createAudioResource(stream, { inputType: StreamType.Arbitrary });
+            const resource = createAudioResource(stream, { 
+                inputType: StreamType.Arbitrary 
+            });
+
+            let player = players.get(message.guild.id);
+            if (!player) {
+                player = createAudioPlayer();
+                players.set(message.guild.id, player);
+            }
 
             player.play(resource);
             connection.subscribe(player);
@@ -85,8 +94,13 @@ client.on('messageCreate', async message => {
     }
 
     if (message.content === '!stop') {
-        player.stop();
-        message.reply('⏹️ Müzik durduruldu.');
+        const player = players.get(message.guild.id);
+        if (player) {
+            player.stop();
+            message.reply('⏹️ Müzik durduruldu.');
+        } else {
+            message.reply('Şu an çalan bir müzik yok.');
+        }
     }
 });
 
